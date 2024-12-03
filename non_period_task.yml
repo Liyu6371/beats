@@ -1,0 +1,57 @@
+# 周期性任务: 代表监控云采集
+# 基础配置
+logger:
+  level: debug        # debug info warn error
+  path: ./beats_log/  # logDir
+# 测试模式
+test_model: false
+
+sender:
+  # socket 发数据到 GSE 的功能 常驻任务（必然开启）
+  socket:
+    enabled: true
+    worker: 3
+    buffer: 500
+    end_point: /var/run/ipc.state.report
+  # kafka 后期支持多 output 的功能，常驻任务（不一定开启）
+  kafka:
+    enabled: false
+    worker: 3
+    buffer: 500
+    retry: 3
+    ack_type: all # all:WaitForAll, local: WaitForLocal, no: NoResponse
+    brokers:
+      - localhost:9092
+
+source:
+  # 数据源，常驻进程，对于监控源插件类型（必然开启），监控云类型（不一定开启）
+  kafka:
+    enabled: true
+    host: 127.0.0.1
+    port: 9092
+    username:
+    password:
+    version: 3.4.0
+    kafka_consumer_group: test_consumer_group
+    kafka_oldest: false
+    kafka_assignor: range  # range、roundrobin、sticky
+    topics:
+      - topic1
+      - topic2
+
+# 监控源采集 （常驻，一定有 source 类型进程）
+non_period_tasks:
+  kafka_source_task:
+    dataid: 333333
+    source:
+      - "kafka"
+    pipeline:
+      processors:
+        - "process1"
+        - "process2"
+      shaper:
+        - "shaper1"
+        - "shaper2"
+    sender:
+      - "kafka"
+      - "socket"
