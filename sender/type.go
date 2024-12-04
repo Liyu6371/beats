@@ -13,16 +13,16 @@ type Msg interface {
 
 // Instance sender 实例接口
 type Instance interface {
-	Push(Msg)                        // 推送数据到 sender 的 channel 中
-	RunSender(context.Context) error // 启动 sender 实例
-	StopSender()                     // 停止 sender 实例
-	Alive() bool                     // 判定 sender 实例是否存活
-	GetName() string                 // 返回 sender 实例名称
+	Push(Msg)                  // 推送数据到 sender 的 channel 中
+	RunSender(context.Context) // 启动 sender 实例
+	StopSender()               // 停止 sender 实例
+	Alive() bool               // 判定 sender 实例是否存活
+	GetName() string           // 返回 sender 实例名称
 }
 
-var instanceFactory = map[string]func(map[string]interface{}) (Instance, error){}
+var instanceFactory = map[string]func(map[string]interface{}) Instance{}
 
-func RegisterInstance(name string, fn func(map[string]interface{}) (Instance, error)) {
+func RegisterInstance(name string, fn func(map[string]interface{}) Instance) {
 	instanceFactory[name] = fn
 }
 

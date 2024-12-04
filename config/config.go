@@ -99,7 +99,7 @@ type Logger struct {
 
 func InitConfig(p string) error {
 	if p == "" {
-		return errors.New("config path shouldn't be empty!")
+		return errors.New("config path shouldn't be empty")
 	}
 	dir, err := os.Getwd()
 	if err != nil {

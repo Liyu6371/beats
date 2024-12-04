@@ -4,7 +4,6 @@ import (
 	"beats/logger"
 	"beats/sender"
 	"context"
-	"fmt"
 	"github.com/TencentBlueKing/bkmonitor-datalink/pkg/libgse/gse"
 	"github.com/mitchellh/mapstructure"
 	"sync"
@@ -30,25 +29,28 @@ type SocketSender struct {
 	client *gse.GseClient
 }
 
-func New(conf map[string]interface{}) (sender.Instance, error) {
+func New(conf map[string]interface{}) sender.Instance {
 	v, ok := conf[Name]
 	if !ok {
-		return nil, fmt.Errorf("socket sender instance: config not found")
+		logger.Errorln("socket sender instance: config not found")
+		return nil
 	}
 	c := Config{}
 	if err := mapstructure.Decode(v, &c); err != nil {
-		return nil, fmt.Errorf("socket sender instance: decode error: %s", err)
+		logger.Errorf("socket sender instance: decode error: %s", err)
+		return nil
 	}
 	if !c.Enabled {
-		logger.Warnf("socket sender instance: not enabled")
-		return nil, nil
+		logger.Warnln("socket sender instance: not enabled")
+		return nil
 	}
 	if c.EndPoint != "" {
 		defaultGseConf.Endpoint = c.EndPoint
 	}
 	client, err := gse.NewGseClientFromConfig(defaultGseConf)
 	if err != nil {
-		return nil, fmt.Errorf("socket sender instance: create client error: %s", err)
+		logger.Errorf("socket sender instance: create client error: %s", err)
+		return nil
 	}
 
 	var ch chan sender.Msg
@@ -65,7 +67,7 @@ func New(conf map[string]interface{}) (sender.Instance, error) {
 		ch:     ch,
 		state:  false,
 		client: client,
-	}, nil
+	}
 }
 
 func (s *SocketSender) GetName() string {
@@ -94,13 +96,16 @@ func (s *SocketSender) turnOff() {
 	}
 }
 
-func (s *SocketSender) RunSender(parent context.Context) error {
+func (s *SocketSender) RunSender(parent context.Context) {
+	defer close(s.ch)
 	if err := s.client.Start(); err != nil {
-		close(s.ch)
-		return fmt.Errorf("socket sender instance: start client error: %s", err)
+		logger.Errorf("socket sender instance: start client error: %s", err)
+		return
 	}
+	defer s.client.Close()
 	s.ctx, s.cancel = context.WithCancel(parent)
 	s.turnOn()
+	defer s.turnOff()
 
 	var workerNum int
 	if s.c.Worker != 0 {
@@ -113,12 +118,14 @@ func (s *SocketSender) RunSender(parent context.Context) error {
 		s.wg.Add(1)
 		go s.consume(i)
 	}
-	return nil
+
+	<-s.ctx.Done()
+	s.wg.Wait()
+	logger.Infof("socket sender instance: stopped")
 }
 
 func (s *SocketSender) consume(idx int) {
 	defer func() {
-		s.turnOff()
 		s.wg.Done()
 	}()
 
@@ -149,10 +156,7 @@ func (s *SocketSender) consume(idx int) {
 
 func (s *SocketSender) StopSender() {
 	s.cancel()
-	s.wg.Wait()
-	close(s.ch)
-	s.client.Close()
-	logger.Infoln("socket sender instance: stop success")
+	logger.Infoln("socket sender instance:  send stop signal")
 }
 
 func (s *SocketSender) Push(msg sender.Msg) {

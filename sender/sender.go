@@ -4,8 +4,7 @@ import (
 	"beats/config"
 	"beats/logger"
 	"context"
-	"errors"
-	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -24,9 +23,10 @@ type Controller struct {
 	senderInstance map[string]Instance
 }
 
-func New(senders []string) *Controller {
-	if len(senders) == 0 {
-		logger.Errorln("sender controller: sender instance name should not be empty")
+func New() *Controller {
+	sConf := config.GetConf().Sender
+	if len(sConf) == 0 {
+		logger.Errorln("sender controller: sender configuration should not be empty")
 		return nil
 	}
 
@@ -35,49 +35,63 @@ func New(senders []string) *Controller {
 		return nil
 	}
 
+	var senders []string
+	for k, _ := range sConf {
+		senders = append(senders, k)
+	}
+
 	senderCtrl = &Controller{
 		senderNames:    senders,
 		wg:             sync.WaitGroup{},
 		mu:             sync.RWMutex{},
-		ch:             make(chan Msg, 2000),
 		senderInstance: make(map[string]Instance),
 	}
 
 	return senderCtrl
 }
 
-func (c *Controller) Run(parent context.Context) error {
-	c.ctx, c.cancel = context.WithCancel(parent)
+func (c *Controller) Run(parent context.Context) {
+	c.ch = make(chan Msg, 2000)
+	defer close(c.ch)
 
+	c.ctx, c.cancel = context.WithCancel(parent)
 	for _, name := range c.senderNames {
 		fn, ok := instanceFactory[name]
 		if !ok {
-			return fmt.Errorf("sender controller: sender instance %s not found", name)
+			logger.Errorf("sender controller: sender instance %s not found", name)
+			continue
 		}
 		// 在这里，对于没有 enabled 的实例， 返回的 instance、error 都是 nil
-		instance, err := fn(config.GetConf().Sender)
-		if err != nil {
-			return fmt.Errorf("sender controller: sender instance %s error: %v", name, err)
-		}
+		instance := fn(config.GetConf().Sender)
 		if instance == nil {
 			continue
 		}
-		if err := instance.RunSender(c.ctx); err != nil {
-			return fmt.Errorf("sender controller: run sender instance %s error: %v", name, err)
-		}
-		c.mu.Lock()
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			instance.RunSender(c.ctx)
+		}()
+		// 记录拉起的 sender 实例
 		c.senderInstance[name] = instance
-		c.mu.Unlock()
 	}
 
-	var length int
-	c.mu.RLock()
-	length = len(c.senderInstance)
-	c.mu.RUnlock()
-	// 校验是否有具体的 sender 实例被拉起执行， 如果没有的话直接返回
-	if length == 0 {
-		return errors.New("sender controller: no sender instances running, maybe something wrong")
+	// 判断一下是否有 sender 实例被拉起来
+	time.Sleep(time.Second * 1)
+	var senderFlag bool
+	for name, sender := range c.senderInstance {
+		if !sender.Alive() {
+			logger.Errorf("sender controller: sender instance %s is dead", name)
+			continue
+		}
+		senderFlag = true
 	}
+
+	// 如果一个实例都没被拉起来，那么就直接 os.exit()
+	if !senderFlag {
+		logger.Errorln("sender controller: no sender instance is alive, program exit")
+		os.Exit(1)
+	}
+
 	// 拉起消息分发
 	for i := 0; i < 3; i++ {
 		c.wg.Add(1)
@@ -87,13 +101,17 @@ func (c *Controller) Run(parent context.Context) error {
 	c.wg.Add(1)
 	go c.check()
 
-	return nil
+	<-c.ctx.Done()
+	c.wg.Wait()
+	logger.Infoln("sender Controller exit")
+
 }
 
 func (c *Controller) dispatch() {
 	defer func() {
 		c.wg.Done()
 	}()
+
 	for {
 		select {
 		case msg, ok := <-c.ch:
@@ -107,6 +125,12 @@ func (c *Controller) dispatch() {
 				logger.Errorf("sender controller: sender instance %s found", msg.GetSender())
 				continue
 			}
+			// 判定对应的 sender 实例是否存活
+			if !instance.Alive() {
+				logger.Errorf("sender controller: sender instance %s is dead", msg.GetSender())
+				continue
+			}
+
 			instance.Push(msg)
 			logger.Debugf("sender controller: send message to %s with data: %s", msg.GetSender(), msg.GetData())
 		case <-c.ctx.Done():
@@ -119,6 +143,7 @@ func (c *Controller) check() {
 	defer c.wg.Done()
 	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ticker.C:
@@ -137,11 +162,9 @@ func (c *Controller) check() {
 
 func (c *Controller) Stop() {
 	c.cancel()
-	c.wg.Wait()
-	close(c.ch)
-	logger.Infoln("sender controller: stopped")
+	logger.Infoln("sender controller: send exit signal")
 }
 
-func GetController() *Controller {
-	return senderCtrl
+func (c *Controller) Channel() chan<- Msg {
+	return c.ch
 }

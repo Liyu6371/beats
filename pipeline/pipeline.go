@@ -5,8 +5,9 @@ import (
 	"beats/sender"
 	"context"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"sync"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 var (
@@ -73,22 +74,16 @@ func (p *Pipeline) Run(parent context.Context, input <-chan []byte, output chan<
 	p.input, p.output = input, output
 	// 存在 input 说明是有 source 类型的任务
 	if input != nil {
-		for i := 0; i < worker; i++ {
-			p.wg.Add(1)
-			go func() {
-				defer p.wg.Done()
-				for {
-					select {
-					case msg, ok := <-p.input:
-						if !ok {
-							return
-						}
-						fmt.Printf("pipeline goroutine receive msg: %s\n ", msg)
-					case <-p.ctx.Done():
-						return
-					}
+		for {
+			select {
+			case msg, ok := <-p.input:
+				if !ok {
+					return
 				}
-			}()
+				fmt.Printf("pipeline goroutine receive msg: %s\n ", msg)
+			case <-p.ctx.Done():
+				return
+			}
 		}
 	} else {
 		p.processWithoutInput()

@@ -21,7 +21,6 @@ type KafkaSource struct {
 	c      Config
 	state  bool
 	mu     sync.RWMutex
-	wg     sync.WaitGroup
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -29,18 +28,20 @@ type KafkaSource struct {
 	handler sarama.ConsumerGroupHandler
 }
 
-func New(conf map[string]interface{}) (source.Instance, error) {
+func New(conf map[string]interface{}) source.Instance {
 	v, ok := conf[Name]
 	if !ok {
-		return nil, errors.New("kafka source instance: config not found")
+		logger.Errorf("kafka source instance: config not found")
+		return nil
 	}
 	c := Config{}
 	if err := mapstructure.Decode(v, &c); err != nil {
-		return nil, fmt.Errorf("kafka source instance: decode error: %s", err)
+		logger.Errorf("kafka source instance: decode error: %s", err)
+		return nil
 	}
 	if !c.Enabled {
 		logger.Warnf("kafka source instance: not enabled")
-		return nil, nil
+		return nil
 	}
 	saramaConf := sarama.NewConfig()
 	if c.Version != "" {
@@ -75,52 +76,48 @@ func New(conf map[string]interface{}) (source.Instance, error) {
 	addr := fmt.Sprintf("%s:%d", c.Host, c.Port)
 	client, err := sarama.NewConsumerGroup([]string{addr}, cg, saramaConf)
 	if err != nil {
-		return nil, fmt.Errorf("kafka source instance: create consumer group client error: %s", err)
+		logger.Errorf("kafka source instance: create consumer group client error: %s", err)
+		return nil
 	}
 	return &KafkaSource{
 		c:      c,
 		state:  false,
 		mu:     sync.RWMutex{},
-		wg:     sync.WaitGroup{},
 		client: client,
-	}, nil
+	}
 }
 
 func (k *KafkaSource) GetName() string {
 	return Name
 }
 
-func (k *KafkaSource) StartSource(parent context.Context, output chan<- []byte) error {
+func (k *KafkaSource) StartSource(parent context.Context, output chan<- []byte) {
 	k.ctx, k.cancel = context.WithCancel(parent)
 	k.handler = &Handler{ch: output}
 
 	k.turnOn()
-	k.wg.Add(1)
-
-	go func() {
-
-		defer func() {
-			k.wg.Done()
-			k.turnOff()
-			k.client.Close()
-		}()
-
-		for {
-			if err := k.client.Consume(k.ctx, k.c.Topics, k.handler); err != nil {
-				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
-					logger.Errorf("kafka source instance: error is : %s", err)
-					return
-				}
-				logger.Errorf("kafka source instance: Error from consumer: %s", err)
-				return
-			}
-			if k.ctx.Err() != nil {
-				return
-			}
+	defer func() {
+		k.turnOff()
+		if err := k.client.Close(); err != nil {
+			logger.Errorf("kafka source instance: close client error: %s", err)
 		}
 	}()
 
-	return nil
+	// 常驻进程，监听到 ctx.Done 后退出
+	for {
+		if err := k.client.Consume(k.ctx, k.c.Topics, k.handler); err != nil {
+			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+				logger.Errorf("kafka source instance: error is : %s", err)
+				return
+			}
+			logger.Errorf("kafka source instance: Error from consumer: %s", err)
+			return
+		}
+		if k.ctx.Err() != nil {
+			return
+		}
+	}
+
 }
 
 func (k *KafkaSource) Alive() bool {
@@ -147,8 +144,7 @@ func (k *KafkaSource) turnOff() {
 
 func (k *KafkaSource) Stop() {
 	k.cancel()
-	k.wg.Wait()
-	k.client.Close()
+	//k.client.Close()
 }
 
 type Handler struct {

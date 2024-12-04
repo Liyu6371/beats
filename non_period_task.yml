@@ -6,6 +6,22 @@ logger:
 # 测试模式
 test_model: false
 
+source:
+  # 数据源，常驻进程，对于监控源插件类型（必然开启），监控云类型（不一定开启）
+  kafka:
+    enabled: true
+    host: 127.0.0.1
+    port: 9092
+    username:
+    password:
+    version: 3.4.0
+    kafka_consumer_group: test_consumer_group
+    kafka_oldest: false
+    kafka_assignor: range  # range、roundrobin、sticky
+    topics:
+      - topic1
+      - topic2
+
 sender:
   # socket 发数据到 GSE 的功能 常驻任务（必然开启）
   socket:
@@ -23,22 +39,6 @@ sender:
     brokers:
       - localhost:9092
 
-source:
-  # 数据源，常驻进程，对于监控源插件类型（必然开启），监控云类型（不一定开启）
-  kafka:
-    enabled: true
-    host: 127.0.0.1
-    port: 9092
-    username:
-    password:
-    version: 3.4.0
-    kafka_consumer_group: test_consumer_group
-    kafka_oldest: false
-    kafka_assignor: range  # range、roundrobin、sticky
-    topics:
-      - topic1
-      - topic2
-
 # 监控源采集 （常驻，一定有 source 类型进程）
 non_period_tasks:
   kafka_source_task:
@@ -46,7 +46,7 @@ non_period_tasks:
     source:
       - "kafka"
     pipeline:
-      processors:
+      processor:
         - "process1"
         - "process2"
       shaper:

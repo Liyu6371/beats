@@ -3,11 +3,17 @@ package beat
 import (
 	"beats/config"
 	"beats/logger"
+	"beats/sender"
 	"beats/source"
+	"beats/task"
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+
+	_ "beats/register"
 )
 
 type Beat struct {
@@ -38,18 +44,60 @@ func New(path string) *Beat {
 }
 
 func (b *Beat) Start() {
-	if len(b.c.Source) > 0 {
-		var sName []string
-		for name := range b.c.Source {
-			sName = append(sName, name)
-		}
-		if sCtrl := source.New(sName); sCtrl == nil {
-			logger.Errorf("source ctrl is nil")
-			os.Exit(1)
-		} else {
+	// 尝试拉起 source Controller
+	var sCtrl *source.Controller
+	if sCtrl = source.New(); sCtrl != nil {
+		b.wg.Add(1)
+		go func() {
+			defer b.wg.Done()
+			sCtrl.Run(b.ctx)
+		}()
+	}
 
+	// 尝试拉起 sender Controller
+	// senderCtrl 作为数据的出口必须存在，并且最少存在一个 sender 实例
+	senderCtrl := sender.New()
+	if senderCtrl == nil {
+		logger.Errorln("senderCtrl is nil, program exit")
+		return
+	}
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		senderCtrl.Run(b.ctx)
+	}()
+
+	// 开始处理任务
+	// 周期任务
+	if len(config.GetConf().PeriodTask) > 0 {
+		for name, taskConf := range config.GetConf().PeriodTask {
+			if pTask := task.NewPeriodTask(name, taskConf); pTask != nil {
+				b.wg.Add(1)
+				go func() {
+					defer b.wg.Done()
+					pTask.Run(b.ctx, nil, senderCtrl.Channel())
+				}()
+			}
 		}
 	}
-}
 
-func (b *Beat) Stop() {}
+	// 非周期任务
+	if len(config.GetConf().NonPeriodTask) > 0 && sCtrl != nil {
+		for name, taskConf := range config.GetConf().NonPeriodTask {
+			if pTask := task.NewNonPeriodTask(name, taskConf); pTask != nil {
+				b.wg.Add(1)
+				go func() {
+					defer b.wg.Done()
+					pTask.Run(b.ctx, sCtrl.GetChannel(), senderCtrl.Channel())
+				}()
+			}
+		}
+	}
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	<-signalChan
+	b.cancel()
+	b.wg.Wait()
+	logger.Infoln("program exit")
+}

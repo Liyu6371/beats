@@ -4,7 +4,6 @@ import (
 	"beats/logger"
 	"beats/sender"
 	"context"
-	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/mitchellh/mapstructure"
 	"strings"
@@ -31,21 +30,24 @@ type KafkaSender struct {
 	client sarama.SyncProducer
 }
 
-func New(conf map[string]interface{}) (sender.Instance, error) {
+func New(conf map[string]interface{}) sender.Instance {
 	v, ok := conf[Name]
 	if !ok {
-		return nil, fmt.Errorf("kafka sender instance: config not found")
+		logger.Errorf("kafka sender instance: config not found")
+		return nil
 	}
 	c := Config{}
 	if err := mapstructure.Decode(v, &c); err != nil {
-		return nil, fmt.Errorf("kafka sender instance: decode error: %s", err)
+		logger.Errorf("kafka sender instance: decode error: %s", err)
+		return nil
 	}
 	if !c.Enabled {
 		logger.Warnf("kafka sender instance: not enabled")
-		return nil, nil
+		return nil
 	}
 	if len(c.Brokers) == 0 {
-		return nil, fmt.Errorf("kafka sender instance: no brokers configured")
+		logger.Errorln("kafka sender instance: no brokers configured")
+		return nil
 	}
 	// 接收消息的 chan
 	var ch chan sender.Msg
@@ -74,7 +76,8 @@ func New(conf map[string]interface{}) (sender.Instance, error) {
 	kafkaConf.Producer.Return.Successes = true
 	client, err := sarama.NewSyncProducer(c.Brokers, kafkaConf)
 	if err != nil {
-		return nil, fmt.Errorf("kafka sender instance: create kafka client error: %s", err)
+		logger.Errorf("kafka sender instance: create kafka client error: %s", err)
+		return nil
 	}
 	return &KafkaSender{
 		c:      c,
@@ -83,7 +86,7 @@ func New(conf map[string]interface{}) (sender.Instance, error) {
 		mu:     sync.RWMutex{},
 		wg:     sync.WaitGroup{},
 		ch:     ch,
-	}, nil
+	}
 }
 
 func (k *KafkaSender) GetName() string {
@@ -112,28 +115,36 @@ func (k *KafkaSender) turnOff() {
 	}
 }
 
-func (k *KafkaSender) RunSender(parent context.Context) error {
+func (k *KafkaSender) RunSender(parent context.Context) {
+	// 退出前释放资源，变更 sender 实例状态
 	k.turnOn()
-	k.ctx, k.cancel = context.WithCancel(parent)
+	defer func() {
+		k.turnOff()
+		if err := k.client.Close(); err != nil {
+			logger.Errorf("kafka sender instance: close kafka client error: %s", err)
+		}
+	}()
 
+	k.ctx, k.cancel = context.WithCancel(parent)
 	var workerNum int
 	if k.c.Worker != 0 {
 		workerNum = k.c.Worker
 	} else {
 		workerNum = 3
 	}
-
 	for i := 0; i < workerNum; i++ {
 		k.wg.Add(1)
 		go k.consume(i)
 	}
-	return nil
+
+	<-k.ctx.Done()
+	k.wg.Wait()
+	logger.Infoln("kafka sender instance done")
 }
 
 func (k *KafkaSender) consume(idx int) {
 	defer func() {
 		k.wg.Done()
-		k.turnOff()
 	}()
 
 	for {
@@ -167,11 +178,8 @@ func (k *KafkaSender) consume(idx int) {
 }
 
 func (k *KafkaSender) StopSender() {
-	logger.Infoln("kafka sender instance: start to stop sender...")
 	k.cancel()
-	k.wg.Wait()
-	close(k.ch)
-	logger.Infoln("kafka sender instance: stop success")
+	logger.Infoln("kafka sender instance: send exit signal")
 }
 
 func (k *KafkaSender) Push(msg sender.Msg) {

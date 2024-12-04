@@ -29,7 +29,7 @@ period_tasks:
     period: 3s
     dataid: 13212
     pipeline:
-      processors:
+      processor:
         - "tmpProcessor"
       shaper:
         - "tmpShaper"
