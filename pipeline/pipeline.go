@@ -4,7 +4,6 @@ import (
 	"beats/logger"
 	"beats/sender"
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/mitchellh/mapstructure"
@@ -80,7 +79,8 @@ func (p *Pipeline) Run(parent context.Context, input <-chan []byte, output chan<
 				if !ok {
 					return
 				}
-				fmt.Printf("pipeline goroutine receive msg: %s\n ", msg)
+				//fmt.Printf("pipeline goroutine receive msg: %s\n ", msg)
+				p.process(msg)
 			case <-p.ctx.Done():
 				return
 			}

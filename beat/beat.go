@@ -69,6 +69,7 @@ func (b *Beat) Start() {
 
 	// 开始处理任务
 	// 周期任务
+	fmt.Println("periodTask")
 	if len(config.GetConf().PeriodTask) > 0 {
 		for name, taskConf := range config.GetConf().PeriodTask {
 			if pTask := task.NewPeriodTask(name, taskConf); pTask != nil {
