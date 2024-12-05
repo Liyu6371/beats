@@ -3,9 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Task map[string]interface{}
@@ -90,6 +91,7 @@ type Config struct {
 	Source        map[string]interface{} `yaml:"source"`
 	PeriodTask    PeriodTask             `yaml:"period_tasks"`
 	NonPeriodTask NonPeriodTask          `yaml:"non_period_tasks"`
+	CustomConfig  map[string]interface{} `yaml:"custom_config"`
 }
 
 type Logger struct {
@@ -118,6 +120,10 @@ func InitConfig(p string) error {
 
 func GetConf() *Config {
 	return g
+}
+
+func GetCustomConf() map[string]interface{} {
+	return g.CustomConfig
 }
 
 func GetPeriodConf() PeriodTask {

@@ -122,7 +122,7 @@ func (c *Controller) dispatch() {
 			instance, ok := c.senderInstance[msg.GetSender()]
 			c.mu.RUnlock()
 			if !ok {
-				logger.Errorf("sender controller: sender instance %s found", msg.GetSender())
+				logger.Errorf("sender controller: sender instance %s not found", msg.GetSender())
 				continue
 			}
 			// 判定对应的 sender 实例是否存活
