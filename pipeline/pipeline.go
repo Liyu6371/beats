@@ -105,15 +105,16 @@ func (p *Pipeline) process(msg []byte) {
 	}
 
 	for _, shaper := range p.shapers {
-		sendMsg, err := shaper.Shape(data)
+		sendMsgs, err := shaper.Shape(data)
 		if err != nil {
 			logger.Errorf("pipeline: shaper %s shape error: %s", shaper.GetName(), err)
 			logger.Debugf("pipeline: shaper %s shape error: %s, data: %s", shaper.GetName(), err, data)
 			continue
 		}
-		p.output <- sendMsg
+		for _, item := range sendMsgs {
+			p.output <- item
+		}
 	}
-
 }
 
 func (p *Pipeline) processWithoutInput() {
@@ -133,12 +134,14 @@ func (p *Pipeline) processWithoutInput() {
 	}
 
 	for _, shaper := range p.shapers {
-		sendMsg, err := shaper.Shape(data)
+		sendMsgs, err := shaper.Shape(data)
 		if err != nil {
 			logger.Errorf("pipeline: shaper: %s shape data error: %s", shaper.GetName(), err)
 			logger.Debugf("pipeline: shaper: %s shape data: %+v error: %s", shaper.GetName(), data, err)
 			continue
 		}
-		p.output <- sendMsg
+		for _, item := range sendMsgs {
+			p.output <- item
+		}
 	}
 }

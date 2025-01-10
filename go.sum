@@ -6,8 +6,6 @@ github.com/Shopify/toxiproxy v2.1.4+incompatible h1:TKdv8HiTLgE5wdJuEML90aBgNWso
 github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMxUHB2q5Ap20/P/eIdh4G0pI=
 github.com/TencentBlueKing/bkmonitor-datalink/pkg/libgse v1.5.0 h1:20lTo06Y+TIt/5jNHIjc/Eqe1CW8qa050m9+1t9jE3Q=
 github.com/TencentBlueKing/bkmonitor-datalink/pkg/libgse v1.5.0/go.mod h1:Vn0vs00HpziMxGTyg7xAehmu6wI22QVwpf5s0fOg9TI=
-github.com/TencentBlueKing/bkmonitor-datalink/pkg/utils v0.1.0 h1:o/Cm9R/IIWJCdNUL0gsnJh3239esya+2Z+M5kMS0eqw=
-github.com/TencentBlueKing/bkmonitor-datalink/pkg/utils v0.1.0/go.mod h1:gS6dnOuSsgxd32gUxzMm4VDt63T6n+FpHxCGMXbyT5o=
 github.com/benbjohnson/clock v1.1.0 h1:Q92kusRqC1XV2MjkWETPvjJVqKetz1OzxZB7mHJLju8=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=

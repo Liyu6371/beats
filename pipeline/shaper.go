@@ -6,7 +6,7 @@ var shaperFactory = map[string]func() Shaper{}
 
 type Shaper interface {
 	GetName() string
-	Shape(interface{}) (sender.Msg, error)
+	Shape(interface{}) ([]sender.Msg, error)
 }
 
 func RegisterShaper(name string, fn func() Shaper) {

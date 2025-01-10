@@ -6,12 +6,14 @@ import (
 	"beats/sender"
 	"beats/source"
 	"beats/task"
+	"beats/utils"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	_ "beats/register"
 )
@@ -67,6 +69,8 @@ func (b *Beat) Start() {
 		senderCtrl.Run(b.ctx)
 	}()
 
+	time.Sleep(time.Second * 5)
+
 	// 开始处理任务
 	// 周期任务
 	if len(config.GetConf().PeriodTask) > 0 {
@@ -93,7 +97,11 @@ func (b *Beat) Start() {
 			}
 		}
 	}
-
+	// 生成 pid 文件
+	if err := utils.GenPid(); err != nil {
+		logger.Errorf("unable to GenPid, error: %s", err)
+		return
+	}
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	<-signalChan
