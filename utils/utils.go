@@ -38,3 +38,23 @@ func GetExecName() string {
 	}
 	return filepath.Base(execPath)
 }
+
+func GenPid() error {
+	basePath := "/var/run/gse"
+	fileName := GetExecName() + ".pid"
+	pidFilePath := filepath.Join(basePath, fileName)
+	if err := CheckPathWritable(pidFilePath); err != nil {
+		return err
+	}
+	pid := os.Getpid()
+	file, err := os.Create(pidFilePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = fmt.Fprint(file, pid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
